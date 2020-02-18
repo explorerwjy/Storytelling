@@ -5,10 +5,6 @@ import requests_oauthlib
 import json
 
 # Connecting to Twitter
-ACCESS_TOKEN = '1179615926611845120-hK20Aep2clbxa7d0NSWnzZ8HM5okrq'
-ACCESS_SECRET = 'fWMEyaPTEsHWYR6fqnKlJ7ZWqO8kzM3WNUoERabu9lKb9'
-CONSUMER_KEY = 'cnRXi72VqFP3slp2hgMMbr1yN'
-CONSUMER_SECRET = 'NxIywlq6kNbuhvlVYxAnxd9SL95l2rrTfj2BtIRiTg6TNLlpr7'
 my_auth = requests_oauthlib.OAuth1(CONSUMER_KEY, CONSUMER_SECRET,ACCESS_TOKEN, ACCESS_SECRET)
 
 
