@@ -7,11 +7,10 @@ import requests_oauthlib
 import json
 import tweepy
 import time
+from key import *
 
 # Connecting to Twitter
 my_auth = requests_oauthlib.OAuth1(CONSUMER_KEY, CONSUMER_SECRET,ACCESS_TOKEN, ACCESS_SECRET)
-
-
 
 def ReadJson(json_obj):
     _id = json_obj["id"]
@@ -52,7 +51,7 @@ def RetriveDataset(tids, api, outname):
     while 1:
         try:
             tweet = api.statuses_lookup(tids[i:j])
-        except RateLimitError:
+        except:
             time.sleep(10)
             continue
         Tweets2CSV(tweet, writer)
