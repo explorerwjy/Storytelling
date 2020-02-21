@@ -1,5 +1,7 @@
+from key import *
 import csv
 import pandas as pd
+import numpy as np
 import socket
 import sys
 import requests
@@ -7,7 +9,24 @@ import requests_oauthlib
 import json
 import tweepy
 import time
-from key import *
+import re, string, unicodedata
+import nltk
+from nltk import word_tokenize, sent_tokenize
+from nltk.corpus import stopwords
+from nltk.stem import LancasterStemmer, WordNetLemmatizer
+from itertools import groupby
+import sklearn
+from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+from sklearn.cluster import AgglomerativeClustering
+from scipy.cluster.hierarchy import dendrogram, linkage, cut_tree
+from matplotlib import pyplot as plt
+
+
+######################################################
+# Get Data From Twitter
+######################################################
 
 # Connecting to Twitter
 my_auth = requests_oauthlib.OAuth1(CONSUMER_KEY, CONSUMER_SECRET,ACCESS_TOKEN, ACCESS_SECRET)
@@ -62,12 +81,94 @@ def RetriveDataset(tids, api, outname):
         if j >= len(tids):
             j = tids
 
+######################################################
+# NLP
+######################################################
+
+class TwitterCleaner:
+    def __init__(self):
+        self.stop_words = set(stopwords.words('english'))
+        self.wnl = WordNetLemmatizer()
+        self.stemmer = LancasterStemmer()
+        self.urlsearch = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\), ]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+
+    def Clean(self, text):
+        text = re.sub(r'RT\s@[\w]*:', '', text)
+        text = re.sub(self.urlsearch, '', text)
+        text = re.sub(r'[^\w\s]', ' ', text)
+        words = nltk.word_tokenize(text)
+        new_words = []
+        for word in words:
+            if word.isnumeric():
+                continue
+            # Remove non-ASCII characters from list of tokenized words
+            word = unicodedata.normalize('NFKD', word).encode('ascii', 'ignore').decode('utf-8', 'ignore')
+            # Convert all characters to lowercase from list of tokenized words
+            word = word.lower()
+            # Remove punctuation from list of tokenized words
+            if word == "":
+                continue
+            # Replace all interger occurrences in list of tokenized words with textual representation
+            if word in self.stop_words:
+                continue
+            #word = self.stemmer.stem(word)
+            #word = self.wnl(word, pos='v')
+            new_words.append(word)
+        return new_words
+
+    def corpusWC(self, Data, wc_res_fil, gram=1):
+        self.WC = {}
+        for words in Data:
+            buff = set([])
+            for word in words:
+                if word not in self.WC:
+                    self.WC[word] = 0
+                else:
+                    if word not in buff:
+                        self.WC[word] += 1
+                buff.add(word)
+        writer = csv.writer(open(wc_res_fil, 'wt'), delimiter="\t")
+        for k,v in sorted(self.WC.items(), key = lambda x:x[1], reverse=True):
+            #writer.write("%s\t%d"%(k,v))
+            writer.writerow([k,v])
+
+    def BagOfWords(self, Data, vocabulary):
+        tmp = []
+        for words in Data:
+            buff = []
+            for word in vocabulary:
+                buff.append(words.count(word))
+            buff = np.array(buff)
+            tmp.append(buff)
+        BW = np.array(tmp)
+        return BW
+
+    def sliceTopic(self, Y, tSNE1, tSNE2):
+        topic = []
+        for i, vec in enumerate(Y):
+            if vec[0] > tSNE1[0] and vec[0] < tSNE1[1] and vec[1] > tSNE2[0]  and vec[1] < tSNE2[1] :
+                topic.append(i)
+        return topic
+
+    def showTopic(self, df, topic, Nshow=3):
+        count = 0
+        for i in topic:
+            tw = df.loc[topic[0], "text"]
+            time = df.loc[topic[0], "created_at"]
+            text = self.Clean(tw)
+            print(tw, time)
+            print(" ".join(text))
+            print()
+            if count >= Nshow:
+                return
+            count += 1
 
 
-
-
-
-
+def AssignCluster(Matrix, Groups):
+    res = [[] for i in range(max(Groups)+1)]
+    for i,g in enumerate(Groups):
+        res[g-1].append(Matrix[i, :])
+    return res
 
 
 #  call the Twitter API URL and return the response for a stream of tweets
