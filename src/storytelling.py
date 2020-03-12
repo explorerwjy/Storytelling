@@ -22,7 +22,8 @@ from sklearn.cluster import KMeans
 from sklearn.cluster import AgglomerativeClustering
 from scipy.cluster.hierarchy import dendrogram, linkage, cut_tree
 from matplotlib import pyplot as plt
-
+from datetime import datetime 
+#import datetime
 
 ######################################################
 # Get Data From Twitter
@@ -152,16 +153,27 @@ class TwitterCleaner:
 
     def showTopic(self, df, topic, Nshow=3):
         count = 0
+        keyinfos = []
         for i in topic:
-            tw = df.loc[topic[0], "text"]
-            time = df.loc[topic[0], "created_at"]
+            print(i)
+            tw = df.loc[i, "text"]
+            time = df.loc[i, "created_at"]
             text = self.Clean(tw)
             print(tw, time)
             print(" ".join(text))
             print()
             if count >= Nshow:
-                return
+                break
             count += 1
+        return df.loc[topic[0]]
+
+    def showTimeline(self, keyinfos):
+        keyinfos = sorted(keyinfos, key=lambda x:datetime.strptime(x["created_at"], '%a %b %d %X %z %Y'))
+        #print(keyinfos)
+        for info in keyinfos:
+            print(info["created_at"])
+            print(info["text"])
+            print()
 
 
 def AssignCluster(Matrix, Groups):
