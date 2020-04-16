@@ -9,6 +9,9 @@ import requests_oauthlib
 import json
 import tweepy
 import time
+import pickle
+import os
+import argparse
 import re, string, unicodedata
 import nltk
 from nltk import word_tokenize, sent_tokenize
@@ -21,8 +24,10 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.cluster import AgglomerativeClustering
 from scipy.cluster.hierarchy import dendrogram, linkage, cut_tree
+from sklearn.metrics.pairwise import cosine_similarity
 from matplotlib import pyplot as plt
 from datetime import datetime 
+import networkx as nx
 #import datetime
 
 ######################################################
@@ -63,7 +68,7 @@ def Tweets2CSV(tweets, writer):
         writer.writerow(res)
 
 def RetriveDataset(tids, api, outname):
-    writer = csv.writer(open("dat/%s"%outname, "wt"))
+    writer = csv.writer(open("../dat/%s"%outname, "wt"))
     header = ["id", "text", "created_at", "retweet_count", "user_id", "user_followers_count",
               "rt_id", "rt_text", "rt_created_at", "rt_retweet_count", "rt_user_id", "rt_user_followers_count"]
     writer.writerow(header)
@@ -94,9 +99,9 @@ class TwitterCleaner:
         self.urlsearch = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\), ]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
 
     def Clean(self, text):
-        text = re.sub(r'RT\s@[\w]*:', '', text)
-        text = re.sub(self.urlsearch, '', text)
-        text = re.sub(r'[^\w\s]', ' ', text)
+        #text = re.sub(r'RT\s@[\w]*:', '', text)
+        #text = re.sub(self.urlsearch, '', text)
+        #text = re.sub(r'[^\w\s]', ' ', text)
         words = nltk.word_tokenize(text)
         new_words = []
         for word in words:
@@ -175,7 +180,6 @@ class TwitterCleaner:
             print(info["text"])
             print()
 
-
 def AssignCluster(Matrix, Groups):
     res = [[] for i in range(max(Groups)+1)]
     for i,g in enumerate(Groups):
@@ -183,6 +187,49 @@ def AssignCluster(Matrix, Groups):
     return res
 
 
+def storyline():
+    Keyinfos = []
+    for i in range(max(clusters)+1):
+        print(i+1)
+        topics = np.where(clusters==i)
+        #print(topics)
+        topics = topics[0]
+        info = DC.showTopic(df, topics, Nshow=3)
+        Keyinfos.append(info)
+        print("-------------")
+
+def LoadWordEmbeddings(fil="../dat/glove/glove.6B.100d.txt"):
+    word_embeddings = {}
+    f = open(fil, encoding='utf-8')
+    for line in f:
+        values = line.split()
+        word = values[0]
+        coefs = np.asarray(values[1:], dtype='float32')
+        word_embeddings[word] = coefs
+    f.close()
+    return word_embeddings
+
+def Sentence2WE(clean_sentences, word_embeddings):
+    sentence_vectors = []
+    for i in clean_sentences:
+        if len(i) != 0:
+            v = sum([word_embeddings.get(w, np.zeros((100,))) for w in i.split()])/(len(i.split())+0.001)
+        else:
+            v = np.zeros((100,))
+        sentence_vectors.append(v)
+    return sentence_vectors
+
+def TextRankScoreMat(sentence_vectors):
+    sim_mat = np.zeros([len(sentence_vectors), len(sentence_vectors)])
+    for i in range(len(sentence_vectors)):
+        for j in range(len(sentence_vectors)):
+            if i != j:
+                sim_mat[i][j] = cosine_similarity(sentence_vectors[i].reshape(1,100), sentence_vectors[j].reshape(1,100))[0,0]
+    return sim_mat
+
+######################################################
+# Connect to spark ???
+######################################################
 #  call the Twitter API URL and return the response for a stream of tweets
 def get_tweets():
     url = 'https://stream.twitter.com/1.1/statuses/filter.json'
