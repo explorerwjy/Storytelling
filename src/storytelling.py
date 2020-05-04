@@ -186,6 +186,42 @@ def AssignCluster(Matrix, Groups):
         res[g-1].append(Matrix[i, :])
     return res
 
+def readsencence(df1):
+    DC = TwitterCleaner()
+    urlsearch = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\), ]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+    tweet_ids = []
+    ALL_Sentences = []
+    Clean_sentences = []
+    for i,row in df1.iterrows():
+        sentence = df1.loc[i, "text"].strip("\n")
+        sentence = re.sub(r'RT\s@[\w]*', ' ', sentence)
+        sentence = re.sub(r'MT\s@[\w]*', ' ', sentence)
+        sentence = re.sub(r'@[\w]*', '', sentence)
+        #sentence = re.sub(r'#[\w]*', '', sentence)
+        sentence = re.sub(r'#', '', sentence)
+        sentence = re.sub(r'&amp;', 'and', sentence)
+        sentence = re.sub(urlsearch, '', sentence)
+        sentence = sentence.strip() 
+        sentences = re.split('; |, ',sentence)
+        new_sentences = []
+        for s in sentences:
+            if "..." in s:
+                continue
+            new_sentences.append(s)
+        sentence = "".join(new_sentences)
+        if "|" in sentence or "~" in sentence:
+            continue
+        XX = sentence.split()
+        if "I" in XX:
+            continue
+        if len(XX)<5:
+            continue
+        if len(XX) > 20:
+            continue
+        tweet_ids.append(i)
+        ALL_Sentences.append(sentence)
+        Clean_sentences.append(" ".join(DC.Clean(sentence)))
+    return tweet_ids, ALL_Sentences, Clean_sentences
 
 def storyline():
     Keyinfos = []
@@ -217,7 +253,7 @@ def Sentence2WE(clean_sentences, word_embeddings):
         else:
             v = np.zeros((100,))
         sentence_vectors.append(v)
-    return sentence_vectors
+    return np.array(sentence_vectors)
 
 def TextRankScoreMat(sentence_vectors):
     sim_mat = np.zeros([len(sentence_vectors), len(sentence_vectors)])
@@ -226,6 +262,9 @@ def TextRankScoreMat(sentence_vectors):
             if i != j:
                 sim_mat[i][j] = cosine_similarity(sentence_vectors[i].reshape(1,100), sentence_vectors[j].reshape(1,100))[0,0]
     return sim_mat
+
+
+
 
 ######################################################
 # Connect to spark ???
