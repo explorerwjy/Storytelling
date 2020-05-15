@@ -28,6 +28,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 from matplotlib import pyplot as plt
 from datetime import datetime 
 import networkx as nx
+import language_check
+
+ConnWords = ["And ", "Also, ", "Furthermore, ", "Moreover, ", "In addion, ", "Besides, ", "In fact, ", "Beyond that, "]
+
 #import datetime
 
 ######################################################
@@ -194,21 +198,30 @@ def readsencence(df1):
     Clean_sentences = []
     for i,row in df1.iterrows():
         sentence = df1.loc[i, "text"].strip("\n")
+        sentence = re.sub(urlsearch, '', sentence)
+        if "!" in sentence or "?" in sentence:
+            continue
+        if "$$" in sentence or "I" in sentence or "news" in sentence.lower():
+            continue
+        sentence = re.sub(r'[^\x00-\x7F]+',' ', sentence)
         sentence = re.sub(r'RT\s@[\w]*', ' ', sentence)
         sentence = re.sub(r'MT\s@[\w]*', ' ', sentence)
-        sentence = re.sub(r'@[\w]*', '', sentence)
+        sentence = re.sub(r'@[\w]*', ' ', sentence)
         #sentence = re.sub(r'#[\w]*', '', sentence)
-        sentence = re.sub(r'#', '', sentence)
+        sentence = re.sub(r'#', ' ', sentence)
         sentence = re.sub(r'&amp;', 'and', sentence)
-        sentence = re.sub(urlsearch, '', sentence)
+        sentence = re.sub(r'\[[\w ]+\]', ' ', sentence)
+        sentence = re.sub(r'\(\w+ \)', ' ', sentence)
+        sentence = re.sub(r'\s-\s[\w ]+', ' ', sentence)
         sentence = sentence.strip() 
         sentences = re.split('; |, ',sentence)
+        #sentences = re.split(' - ',sentence)
         new_sentences = []
         for s in sentences:
             if "..." in s:
                 continue
             new_sentences.append(s)
-        sentence = "".join(new_sentences)
+        sentence = " ".join(new_sentences)
         if "|" in sentence or "~" in sentence:
             continue
         XX = sentence.split()
@@ -219,8 +232,8 @@ def readsencence(df1):
         if len(XX) > 20:
             continue
         tweet_ids.append(i)
-        ALL_Sentences.append(sentence)
-        Clean_sentences.append(" ".join(DC.Clean(sentence)))
+        ALL_Sentences.append(sentence.lower())
+        Clean_sentences.append(" ".join(DC.Clean(sentence.lower())))
     return tweet_ids, ALL_Sentences, Clean_sentences
 
 def storyline():
@@ -263,8 +276,23 @@ def TextRankScoreMat(sentence_vectors):
                 sim_mat[i][j] = cosine_similarity(sentence_vectors[i].reshape(1,100), sentence_vectors[j].reshape(1,100))[0,0]
     return sim_mat
 
+def plot_dendrogram(model, **kwargs):
+    counts = np.zeros(model.children_.shape[0])
+    n_samples = len(model.labels_)
+    for i, merge in enumerate(model.children_):
+        current_count = 0
+        for child_idx in merge:
+            if child_idx < n_samples:
+                current_count += 1  # leaf node
+            else:
+                current_count += counts[child_idx - n_samples]
+        counts[i] = current_count
+    linkage_matrix = np.column_stack([model.children_, model.distances_,counts]).astype(float)
+    dendrogram(linkage_matrix, **kwargs)
 
-
+def InsertConn(paragraph):
+    ConnWords = ["And", "Also", "too", "Furthermore", "Moreover", "Inaddion", "Besides", "In fact", "Beyond that"]
+     
 
 ######################################################
 # Connect to spark ???
