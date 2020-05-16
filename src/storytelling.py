@@ -1,3 +1,7 @@
+import argparse
+import random
+from bert_extractive_summarizer.summarizer import Summarizer
+from bert_extractive_summarizer.summarizer.coreference_handler import CoreferenceHandler
 from key import *
 import csv
 import pandas as pd
@@ -332,3 +336,109 @@ def send_tweets_to_spark(http_resp, tcp_connection):
 #resp = get_tweets()
 #send_tweets_to_spark(resp, conn)
 
+def storytell(inpfil):
+    word_embeddings = LoadWordEmbeddings(fil="../dat/glove/glove.twitter.27B.100d.txt")
+    df = pd.read_csv(inpfil, index_col="id")
+    df = df[df["rt_id"].isna()] # Drop retweets
+    df1 = df[df["user_followers_count"]>10**2]
+    tids, row_sentences, clean_sentences = readsencence(df1)
+    sentence_vectors = Sentence2WE(clean_sentences, word_embeddings)
+    pca = PCA(n_components=40, svd_solver='arpack')
+    X = pca.fit_transform(sentence_vectors)
+    NC = 40
+    for nc, vexp in enumerate(np.cumsum(pca.explained_variance_ratio_)):
+        if vexp > 0.9:
+            NC = nc+1
+            break
+    Agg = sklearn.cluster.AgglomerativeClustering(distance_threshold=1.5, n_clusters=None, affinity="cosine",linkage="complete")
+    Agg = Agg.fit(X[:, :NC])
+    clusters = Agg.fit_predict(X[:, :NC])
+    Totoal_art = []
+    tool = language_check.LanguageTool('en-US')
+    for i in range(max(clusters)+1):
+        topics = np.where(clusters==i)[0]
+        if len(topics) < 5:
+            continue
+        topic_tweet_idxs = np.array([tids[int(i)] for i in topics])
+        topic_sentence_vectors = np.array([sentence_vectors[int(i)] for i in topics])
+        sim_mat = TextRankScoreMat(topic_sentence_vectors)
+        threashold = 0.8
+        rm_idx = []
+        kept_idx = []
+        for i in range(sim_mat.shape[0]):
+            if i in rm_idx:
+                continue
+            kept_idx.append(i)
+            for j in range(sim_mat.shape[1]):
+                if sim_mat[i,j]>threashold:
+                    rm_idx.append(j) 
+        art = []
+        selected_Clean = []
+        for i in kept_idx:
+            dat_id = topics[i]
+            tid = tids[dat_id]
+            date = datetime.strptime(df1.loc[tid, "created_at"],'%a %b %d %X %z %Y').strftime("%m-%d-%X")
+            if len(row_sentences[dat_id]) > 20:
+                art.append(row_sentences[dat_id])
+                selected_Clean.append(clean_sentences[dat_id])
+    Totoal_art.append(".".join(art))
+    model = "bert-large-uncased"
+    hidden = -2
+    reduce_option = "mean"
+    model = Summarizer(model = model, hidden = hidden, reduce_option = reduce_option)
+    All = "\n".join(Totoal_art)
+    New_ALL = ""
+    i = 0
+    last_con = None
+    for sent in All.split("."):
+        if len(sent.split()) < 5:
+            continue
+        sent = sent.strip().strip(":").strip(" ").strip(":").strip(" ")
+        if "I" in sent or "We" in sent or "video" in sent or "photo" in sent or "new" in sent or "news" in sent:
+            continue
+        if len(sent.strip().split()) < 4 or " — " in sent or "$$" in sent:
+            continue
+        matches = tool.check(sent)
+        if len(matches)<=5:
+            if i == 0 or i ==1:
+                New_ALL = New_ALL + language_check.correct(sent, matches) + ". "
+            else:
+                while 1:
+                    con = random.choice(ConnWords)
+                    if con != last_con:
+                        last_con = con
+                        break
+                if random.random()> 0.3:
+                    New_ALL = New_ALL + con  + language_check.correct(sent, matches) + ". "
+                else:
+                    New_ALL = New_ALL + language_check.correct(sent, matches) + ". "
+            i += 1
+    print(New_ALL)
+    print()
+    result = model(New_ALL)
+    print(result)
+
+
+
+def download_data(event_id):
+    tweets = pd.read_csv("../dat/tweeterNews/tweets.csv.gz", names=["tid", "eid"])
+    event_tweets = tweets[tweets["eid"]==event_id]
+    tids = list(event_tweets["tid"].values)
+    RetriveDataset(tids, api, "{}.csv".format(event_id))
+
+def GetOptions():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--input', default = None, type=str, help = 'Input file of twitter dataset')
+    parser.add_argument('--download', default = None , type=str, help = 'EVENT ID for download')
+    args = parser.parse_args()
+    return args
+
+def main():
+    args = GetOptions() 
+    if args.download != None:
+        download_data(args.download)
+    elif args.input != None:
+        storytell(args.input)
+
+if __name__=="__main__":
+    main()
